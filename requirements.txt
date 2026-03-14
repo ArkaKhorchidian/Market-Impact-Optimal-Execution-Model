@@ -1,0 +1,11 @@
+numpy>=1.26
+scipy>=1.11
+pandas>=2.0
+matplotlib>=3.7
+seaborn>=0.13
+
+# Optional: for real-data backtest notebook
+# yfinance>=0.2
+
+# Dev / testing
+pytest>=7.0
