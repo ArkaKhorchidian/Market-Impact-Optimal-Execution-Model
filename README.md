@@ -47,11 +47,11 @@ $$P_k = S_{k-1} - h(n_k/\tau)$$
 
 $$E[C] = \underbrace{\frac{1}{2}\gamma X^2}_{\text{permanent (schedule-independent)}} + \underbrace{\eta \sum_{k=1}^N \frac{n_k^2}{\tau}}_{\text{temporary impact}}$$
 
-$$\operatorname{Var}[C] = \sigma^2 \tau \sum_{k=1}^N x_k^2$$
+$$\mathrm{Var}[C] = \sigma^2 \tau \sum_{k=1}^N x_k^2$$
 
 The **mean–variance utility** to minimise:
 
-$$U(\lambda) = E[C] + \lambda\,\operatorname{Var}[C]$$
+$$U(\lambda) = E[C] + \lambda\,\mathrm{Var}[C]$$
 
 ### Optimal Trajectory Derivation
 
@@ -73,7 +73,7 @@ $$\boxed{x^*(t) = X \cdot \frac{\sinh(\kappa(T-t))}{\sinh(\kappa T)}, \qquad \ka
 
 ### Efficient Frontier
 
-As $\lambda$ varies over $[0,\infty)$, the pair $(E[C], \operatorname{Var}[C])$ traces the **Pareto-optimal frontier**: no feasible strategy can reduce expected cost without increasing variance.  TWAP lies at $\lambda=0$ — the risk-neutral extreme.
+As $\lambda$ varies over $[0,\infty)$, the pair $(E[C], \mathrm{Var}[C])$ traces the **Pareto-optimal frontier**: no feasible strategy can reduce expected cost without increasing variance.  TWAP lies at $\lambda=0$ — the risk-neutral extreme.
 
 ---
 
