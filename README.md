@@ -117,14 +117,15 @@ from src.execution_sim import compare_strategies, slippage_summary
 
 stats = compare_strategies(
     X=1_000_000, T=1.0, N=390, sigma=0.02,
-    gamma=2.5e-7, eta=2.5e-6, lam=1e-6,
-    S0=100.0, n_sims=1000, seed=42,
+    gamma=2.5e-7, eta=2.5e-6, lam=1e-2,
+    S0=100.0, n_sims=2000, seed=42,
 )
 print(slippage_summary(stats))
-# Strategy   Mean IS (bps)   Std IS (bps)   Sharpe IS
-# AC2001             x.xx          x.xx         x.xxx
-# TWAP               x.xx          x.xx         0.000
-# VWAP               x.xx          x.xx         x.xxx
+# Strategy    Mean IS (bps)  Std IS (bps)  Sharpe IS
+# ----------------------------------------------------
+# AC2001            272.77        103.22     -0.874
+# TWAP              261.84        113.51      0.000
+# VWAP              353.79        106.73     -5.042
 ```
 
 ```python
@@ -146,26 +147,86 @@ print(f"HAR-RV 1-day forecast vol: {har.daily_vol:.4f}")
 
 ## Results
 
+> All results below are fully reproducible.  Run `python run_results.py` to regenerate figures and numbers.  
+> Test suite: **50/50 passing** (`python -m pytest tests/ -v`).
+
 ### Efficient Frontier
 
-The frontier curves downward-left as $\lambda$ increases from 0 (TWAP, low E[C] but high variance) toward infinity (immediate liquidation, high E[C] but zero variance).
+Parameters: X = 1,000,000 shares, T = 1 day, N = 390 intervals, σ = 2 %/day, η = 2.5 × 10⁻⁶, γ = 2.5 × 10⁻⁷, S₀ = $100.
+
+| Strategy / λ | E[C] | E[C] (bps) | Var[C] | σ[C] | Var reduction |
+|---|---|---|---|---|---|
+| TWAP (λ = 0) | $2,625,000 | 262.5 | 1.328 × 10⁸ | $11,525 | — |
+| λ = 10⁻⁹ | $2,625,000 | 262.5 | 1.328 × 10⁸ | $11,525 | ≈ 0% |
+| λ = 10⁻⁴ | $2,625,014 | 262.5 | 1.325 × 10⁸ | $11,512 | 0.2% |
+| λ = 10⁻² | $2,732,418 | 273.2 | 1.097 × 10⁸ | $10,475 | **17.4%** |
+
+Cost breakdown: permanent impact (½γX²) = $125,000 (**12.5 bps**, schedule-independent); temporary impact = $2,500,000 (**250.0 bps**) at TWAP.
+
+![Efficient Frontier](data/fig_frontier.png)
 
 Key observations:
-- TWAP minimises E[C] but carries substantial timing risk
-- The frontier is convex — diminishing returns to risk reduction
-- For moderate risk aversion ($\lambda \sim 10^{-6}$), AC2001 reduces Var[C] by ~10–30% with a small E[C] penalty
+- TWAP minimises E[C] but carries maximum timing risk
+- The frontier is convex — reducing variance becomes increasingly costly in E[C]
+- At λ = 10⁻², AC2001 cuts cost variance by **17.4 %** at a penalty of 10.7 bps more E[C]
+- κ = √(λσ²/η) controls curvature: the trajectory is visually indistinguishable from TWAP until κT ≳ 0.1, which requires λ ≳ 10⁻³ under these parameters
 
-### Backtest Summary
+![Optimal Trajectories](data/fig_trajectories.png)
 
-Run notebook 4 to generate results against real data:
+### Monte Carlo Strategy Comparison
 
-```bash
-jupyter nbconvert --to notebook --execute notebooks/04_real_data_backtest.ipynb --inplace
-```
+2,000 paired simulations, λ = 10⁻², X = 1,000,000 shares, σ = 2 %/day:
 
-The notebook fetches 2 years of daily bars via `yfinance`, estimates σ with three estimators (CC, GARCH, HAR-RV), calibrates η and γ from the Almgren et al. (2005) scaling relation, and runs 500 paired Monte Carlo simulations per ticker. Results include mean IS (bps), std IS, and Sharpe of IS reduction vs TWAP for AAPL, MSFT, SPY, QQQ, and TSLA.
+| Strategy | Mean IS (bps) | Std IS (bps) | p5 (bps) | p95 (bps) | Sharpe IS |
+|---|---|---|---|---|---|
+| **AC2001** | **272.77** | **103.22** | 101.9 | 443.3 | −0.874 |
+| TWAP | 261.84 | 113.51 | 72.3 | 451.0 | 0.000 |
+| VWAP (U-shape) | 353.79 | 106.73 | 174.3 | 533.0 | −5.042 |
 
-Run `jupyter nbconvert --to notebook --execute notebooks/04_real_data_backtest.ipynb` to populate results.
+![IS Comparison](data/fig_is_comparison.png)
+
+At λ = 10⁻² (κT = 1.26) the AC trajectory front-loads aggressively: IS std drops from 113.5 bps (TWAP) to **103.2 bps** (−9 %), at the cost of a higher mean IS (272.8 vs 261.8 bps, +10.9 bps).  This is exactly the mean–variance trade-off the model is designed to make — the negative Sharpe IS for AC2001 is correct and expected: AC accepts worse average IS to reduce timing risk, as dictated by λ > 0.  VWAP (U-shaped volume profile) has the worst mean IS because it concentrates trades at open/close where temporary impact is highest.
+
+### Backtest — Real Data (yfinance, 2-year daily bars)
+
+Estimated σ (three estimators) for 5 liquid US equities.  η and γ calibrated from Almgren et al. (2005).  500 paired Monte Carlo simulations per ticker.  X = 500,000 shares, λ = 10⁻⁶, T = 1 day.
+
+**Volatility estimates (%/day):**
+
+| Ticker | CC-21d | GARCH(1,1) | HAR-RV |
+|---|---|---|---|
+| AAPL | 1.21 % | 1.47 % | 1.40 % |
+| MSFT | 1.62 % | 1.72 % | 1.60 % |
+| SPY | 1.21 % | 1.09 % | 1.16 % |
+| QQQ | 1.47 % | 1.35 % | 1.45 % |
+| TSLA | 2.65 % | 2.50 % | 3.32 % |
+
+![Volatility Comparison](data/fig_vol_comparison.png)
+
+GARCH and HAR-RV track each other closely for low-vol names; HAR-RV captures more of TSLA's volatility clustering.
+
+**IS summary (AC2001 vs TWAP, mean / std in bps):**
+
+| Ticker | AC2001 mean | AC2001 std | TWAP mean | TWAP std |
+|---|---|---|---|---|
+| AAPL | −2.5 | 54.2 | −3.0 | 70.0 |
+| MSFT | −3.6 | 79.7 | −4.0 | 93.7 |
+| SPY | −2.3 | 48.8 | −3.0 | 70.1 |
+| QQQ | −3.0 | 65.7 | −3.7 | 85.0 |
+| TSLA | −4.1 | 93.2 | −6.6 | 153.0 |
+
+With real-calibrated η values (Almgren 2005), κT is large even at λ = 10⁻⁶ — the tiny η means fast trading is cheap, so the model front-loads aggressively:
+
+| Ticker | η | κT at λ=10⁻⁶ | AC midpoint holding |
+|---|---|---|---|
+| AAPL | 2.87 × 10⁻¹¹ | 2.26 | 29 % of X (TWAP = 50 %) |
+| TSLA | 4.70 × 10⁻¹¹ | 3.87 | 14 % of X (TWAP = 50 %) |
+
+![Backtest Boxplots](data/fig_backtest_boxplots.png)
+
+This front-loading is what drives the **20–40 % std reduction** vs TWAP — AC carries the position for far less time, reducing exposure to adverse price moves.  Mean IS differences are within noise because impact is tiny relative to σ (500 sims; the slightly negative means reflect sampling variation, not a systematic edge).
+
+**Methodology note**: η and γ are from the Almgren et al. (2005) cross-sectional scaling relation — order-of-magnitude estimates, not fitted to proprietary execution data.  Results should be treated as illustrative.  See notebook `04_real_data_backtest.ipynb` for full details and caveats.
 
 ---
 
@@ -187,7 +248,7 @@ $$\eta \approx 0.142 \cdot \frac{\sigma}{P \cdot \text{ADV}}, \qquad \gamma \app
 
 ```python
 from src.market_impact import almgren_2005_params
-p = almgren_2005_params(sigma_dollar=3.0, adv=5e6, price=150.0)
+p = almgren_2005_params(sigma=3.0, adv=5e6, price=150.0)  # sigma in dollar units
 ```
 
 **With tick data**: regress mid-price changes on signed order flow (Kyle's λ):

@@ -17,7 +17,6 @@ data/*.csv
 data/*.parquet
 data/*.h5
 data/*.pkl
-data/*.png
 data/*.pdf
 !data/README.md
 
